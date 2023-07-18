@@ -81,7 +81,7 @@ set(CUDF_DIR
 )
 
 # Set a default build type if none was specified
-rapids_cmake_build_type("Release")
+rapids_cmake_build_type("Debug")
 
 # ##################################################################################################
 # * compiler options ------------------------------------------------------------------------------

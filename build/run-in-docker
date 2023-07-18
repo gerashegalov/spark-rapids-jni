@@ -18,7 +18,7 @@
 
 # Run a command in a Docker container with devtoolset
 
-set -e
+set -ex
 
 # Base paths relative to this script's location
 SCRIPTDIR=$(cd $(dirname $0); pwd)
