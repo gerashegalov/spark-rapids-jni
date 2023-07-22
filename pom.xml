@@ -21,7 +21,7 @@
 
   <groupId>com.nvidia</groupId>
   <artifactId>spark-rapids-jni</artifactId>
-  <version>23.08.0-SNAPSHOT</version>
+  <version>23.08.0-SNAPSHOT-int96</version>
   <packaging>jar</packaging>
   <name>RAPIDS Accelerator JNI for Apache Spark</name>
   <description>
@@ -104,6 +104,7 @@
     <submodule.check.skip>false</submodule.check.skip>
     <antrun.version>3.0.0</antrun.version>
     <hilbert.version>0.2.2</hilbert.version>
+    <dist.jar.compress>false</dist.jar.compress>
   </properties>
 
   <dependencies>
@@ -454,6 +455,12 @@
           <classifier>${cuda.version}</classifier>
         </configuration>
         <executions>
+          <execution>
+            <id>default-jar</id>
+            <configuration>
+              <archive><compress>${dist.jar.compress}</compress></archive>
+            </configuration>
+          </execution>
           <execution>
             <goals>
               <goal>test-jar</goal>
