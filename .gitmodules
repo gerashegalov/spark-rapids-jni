@@ -1,4 +1,4 @@
 [submodule "thirdparty/cudf"]
 	path = thirdparty/cudf
-	url = https://github.com/rapidsai/cudf.git
-	branch = branch-24.06
+	url = /home/gshegalov/gits/rapidsai/cudf
+	branch = gerashegalov/fixed_ukernel_rlestream_24.04_rebase_load_balancing
