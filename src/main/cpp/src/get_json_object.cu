@@ -35,6 +35,7 @@
 #include <cudf/utilities/span.hpp>
 
 #include <rmm/device_uvector.hpp>
+#include <rmm/exec_policy.hpp>
 
 #include <thrust/pair.h>
 #include <thrust/tuple.h>
@@ -42,6 +43,12 @@
 namespace spark_rapids_jni {
 
 namespace detail {
+
+// path max depth limitation
+// There is a same constant in JSONUtil.java, keep them consistent when changing
+// Note: Spark-Rapids should guarantee the path depth is less or equal to this limit,
+// or GPU reports cudaErrorIllegalAddress
+constexpr int max_path_depth = 16;
 
 /**
  * write JSON style
@@ -382,12 +389,6 @@ __device__ bool evaluate_path(json_parser& p,
     // used to save child JSON generator for case path 8
     json_generator child_g;
   };
-
-  // path max depth limitation
-  // There is a same constant in JSONUtil.java, keep them consistent when changing
-  // Note: Spark-Rapids should guarantee the path depth is less or equal to this limit,
-  // or GPU reports cudaErrorIllegalAddress
-  constexpr int max_path_depth = 8;
 
   // define stack; plus 1 indicates root context task needs an extra memory
   context stack[max_path_depth + 1];
@@ -790,7 +791,7 @@ rmm::device_uvector<path_instruction> construct_path_commands(
   std::vector<std::tuple<path_instruction_type, std::string, int64_t>> const& instructions,
   cudf::string_scalar const& all_names_scalar,
   rmm::cuda_stream_view stream,
-  rmm::mr::device_memory_resource* mr)
+  rmm::device_async_resource_ref mr)
 {
   int name_pos = 0;
 
@@ -799,10 +800,6 @@ rmm::device_uvector<path_instruction> construct_path_commands(
   for (auto const& inst : instructions) {
     auto const& [type, name, index] = inst;
     switch (type) {
-      case path_instruction_type::SUBSCRIPT:
-      case path_instruction_type::KEY:
-        // skip SUBSCRIPT and KEY to save stack size in `evaluate_path`
-        break;
       case path_instruction_type::WILDCARD:
         path_commands.emplace_back(path_instruction{path_instruction_type::WILDCARD});
         break;
@@ -954,9 +951,11 @@ std::unique_ptr<cudf::column> get_json_object(
   cudf::strings_column_view const& input,
   std::vector<std::tuple<path_instruction_type, std::string, int64_t>> const& instructions,
   rmm::cuda_stream_view stream,
-  rmm::mr::device_memory_resource* mr)
+  rmm::device_async_resource_ref mr)
 {
   if (input.is_empty()) return cudf::make_empty_column(cudf::type_id::STRING);
+
+  if (instructions.size() > max_path_depth) { CUDF_FAIL("JSONPath query exceeds maximum depth"); }
 
   // get a string buffer to store all the names and convert to device
   std::string all_names;
@@ -1020,7 +1019,7 @@ std::unique_ptr<cudf::column> get_json_object(
   cudf::strings_column_view const& input,
   std::vector<std::tuple<path_instruction_type, std::string, int64_t>> const& instructions,
   rmm::cuda_stream_view stream,
-  rmm::mr::device_memory_resource* mr)
+  rmm::device_async_resource_ref mr)
 {
   return detail::get_json_object(input, instructions, stream, mr);
 }
