@@ -13,42 +13,12 @@
     {
       "always_download" : true,
       "git_shallow" : false,
-      "git_tag" : "36f379f29660761fe033a1306ca9dab6a88cb65c",
+      "git_tag" : "e21d607157218540cd7c45461213fb96adf720b7",
       "git_url" : "https://github.com/NVIDIA/cccl.git",
       "patches" : 
       [
         {
-          "file" : "cccl/bug_fixes.diff",
-          "fixed_in" : "2.3",
-          "issue" : "CCCL installs header-search.cmake files in nondeterministic order and has a typo in checking target creation that leads to duplicates"
-        },
-        {
-          "file" : "cccl/hide_kernels.diff",
-          "fixed_in" : "2.3",
-          "issue" : "Mark all cub and thrust kernels with hidden visibility [https://github.com/nvidia/cccl/pulls/443]"
-        },
-        {
-          "file" : "cccl/revert_pr_211.diff",
-          "fixed_in" : "",
-          "issue" : "thrust::copy introduced a change in behavior that causes failures with cudaErrorInvalidValue."
-        },
-        {
-          "file" : "${current_json_dir}/revert_pr_211_cccl_2.5.0.diff",
-          "fixed_in" : "",
-          "issue" : "thrust::copy introduced a change in behavior that causes failures with cudaErrorInvalidValue."
-        },
-        {
-          "file" : "cccl/kernel_pointer_hiding.diff",
-          "fixed_in" : "2.4",
-          "issue" : "Hide APIs that accept kernel pointers [https://github.com/NVIDIA/cccl/pull/1395]"
-        },
-        {
           "file" : "${current_json_dir}/thrust_disable_64bit_dispatching.diff",
-          "fixed_in" : "",
-          "issue" : "Remove 64bit dispatching as not needed by libcudf and results in compiling twice as many kernels [https://github.com/rapidsai/cudf/pull/11437]"
-        },
-        {
-          "file" : "${current_json_dir}/thrust_disable_64bit_dispatching_cccl_2.5.0.diff",
           "fixed_in" : "",
           "issue" : "Remove 64bit dispatching as not needed by libcudf and results in compiling twice as many kernels [https://github.com/rapidsai/cudf/pull/11437]"
         },
@@ -58,22 +28,12 @@
           "issue" : "Improve Thrust sort compile times by not unrolling loops for inlined comparators [https://github.com/rapidsai/cudf/pull/10577]"
         },
         {
-          "file" : "${current_json_dir}/thrust_faster_sort_compile_times_cccl_2.5.0.diff",
-          "fixed_in" : "",
-          "issue" : "Improve Thrust sort compile times by not unrolling loops for inlined comparators [https://github.com/rapidsai/cudf/pull/10577]"
-        },
-        {
           "file" : "${current_json_dir}/thrust_faster_scan_compile_times.diff",
-          "fixed_in" : "",
-          "issue" : "Improve Thrust scan compile times by reducing the number of kernels generated [https://github.com/rapidsai/cudf/pull/8183]"
-        },
-        {
-          "file" : "${current_json_dir}/thrust_faster_scan_compile_times_cccl_2.5.0.diff",
           "fixed_in" : "",
           "issue" : "Improve Thrust scan compile times by reducing the number of kernels generated [https://github.com/rapidsai/cudf/pull/8183]"
         }
       ],
-      "version" : "2.2.0"
+      "version" : "2.5.0"
     },
     "GTest" : 
     {
@@ -87,7 +47,7 @@
     {
       "always_download" : true,
       "git_shallow" : false,
-      "git_tag" : "2b3cbd067a689353bf522f9f1368fb886236b48e",
+      "git_tag" : "ab3778c0462c2f713125a4e458f46bcd654b9d54",
       "git_url" : "https://github.com/rapidsai/kvikio.git",
       "version" : "24.08"
     },
@@ -95,7 +55,7 @@
     {
       "always_download" : true,
       "git_shallow" : false,
-      "git_tag" : "2101cb31d0210b609cd02c88f9b538e10881d91d",
+      "git_tag" : "e7b5a389b823bebe465cefe63ad7b0e95f7fb450",
       "git_url" : "https://github.com/NVIDIA/cuCollections.git",
       "version" : "0.0.1"
     },
@@ -172,7 +132,7 @@
     {
       "always_download" : true,
       "git_shallow" : false,
-      "git_tag" : "8597c22a93b0950517c6c80b94f41f8e3313dd80",
+      "git_tag" : "f91ca6f22195868e6493e38975f5c07029bd1977",
       "git_url" : "https://github.com/rapidsai/rmm.git",
       "version" : "24.08"
     },
