@@ -1,3 +1,7 @@
+<!---
+Copyright (c) 2022-2024, NVIDIA CORPORATION.
+-->
+
 # Contributing to RAPIDS Accelerator JNI for Apache Spark
 
 Contributions to RAPIDS Accelerator JNI for Apache Spark fall into the following three categories.
