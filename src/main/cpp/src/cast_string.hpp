@@ -36,12 +36,18 @@ struct cast_error : public std::runtime_error {
   /**
    * @brief Constructs a cast_error with the error message.
    *
-   * @param message Message to be associated with the exception
+   * @param row_number Row containing the value that could not be cast.
+   * @param string_with_error Value that could not be cast.
+   * @param time_parser_policy_disagreement Whether CORRECTED rejected the value while LEGACY
+   *                                        accepted it.
    */
-  cast_error(cudf::size_type row_number, std::string const& string_with_error)
+  cast_error(cudf::size_type row_number,
+             std::string const& string_with_error,
+             bool time_parser_policy_disagreement = false)
     : std::runtime_error("casting error"),
       _row_number(row_number),
-      _string_with_error(string_with_error)
+      _string_with_error(string_with_error),
+      _time_parser_policy_disagreement(time_parser_policy_disagreement)
   {
   }
 
@@ -59,9 +65,18 @@ struct cast_error : public std::runtime_error {
    */
   [[nodiscard]] std::string const& get_string_with_error() const { return _string_with_error; }
 
+  /**
+   * @brief Whether the error is a CORRECTED/LEGACY parser-policy disagreement.
+   */
+  [[nodiscard]] bool is_time_parser_policy_disagreement() const
+  {
+    return _time_parser_policy_disagreement;
+  }
+
  private:
   cudf::size_type _row_number;
   std::string _string_with_error;
+  bool _time_parser_policy_disagreement;
 };
 
 /**
@@ -223,8 +238,8 @@ std::unique_ptr<cudf::column> parse_strings_to_date(
  * pattern matches exactly one ' ' in the input; 'T' is rejected as the date/time separator
  * under both policies (unlike the format-less cast). Quoted literals (`'T'`) are not
  * supported. Pattern literals must be ASCII. In LEGACY
- * mode, non-year digit fields are 1 or 2 digits unless adjacent to another digit field (in
- * which case widths are exact to disambiguate). Parsed values are wall-clock UTC; timezone
+ * mode, non-year digit fields are 1 or 2 digits. Adjacent fields reserve the minimum width
+ * required by the fields that follow. Parsed values are wall-clock UTC; timezone
  * rebasing remains the caller's responsibility — in LEGACY mode the trailing non-digit rule
  * silently accepts (and discards) any non-digit suffix including 'Z', so callers must not
  * infer a UTC offset from a trailing 'Z'.
@@ -238,6 +253,7 @@ std::unique_ptr<cudf::column> parse_strings_to_date(
  * @param legacy True for `LegacyTimeParserPolicy`, false for CORRECTED/EXCEPTION.
  * @param exception_policy If true, throw `cast_error` when CORRECTED rejects a row that LEGACY
  *                         accepts.
+ * @param fail_on_error If true, throw `cast_error` for any invalid non-null input.
  * @param stream Stream on which to operate.
  * @param mr Memory resource for the returned column.
  * @return A timestamp_us column, with nulls for invalid inputs.
@@ -247,6 +263,7 @@ std::unique_ptr<cudf::column> parse_timestamp_strings_with_format(
   std::string const& format,
   bool legacy,
   bool exception_policy,
+  bool fail_on_error,
   cuda::stream_ref stream           = cudf::get_default_stream(),
   rmm::device_async_resource_ref mr = cudf::get_current_device_resource_ref());
 

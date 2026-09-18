@@ -49,7 +49,7 @@ constexpr jint TIME_PARSER_POLICY_EXCEPTION = 2;
     if (env->ExceptionOccurred()) { return ret_val; }                          \
     jclass ex_class = env->FindClass(JNI_CAST_ERROR_CLASS);                    \
     if (ex_class != NULL) {                                                    \
-      jmethodID ctor_id = env->GetMethodID(ex_class, "<init>", "([BI)V");      \
+      jmethodID ctor_id = env->GetMethodID(ex_class, "<init>", "([BIZ)V");     \
       if (ctor_id != NULL) {                                                   \
         std::string const& n_msg = e.get_string_with_error();                  \
         auto const j_msg_size    = static_cast<jsize>(n_msg.size());           \
@@ -66,7 +66,10 @@ constexpr jint TIME_PARSER_POLICY_EXCEPTION = 2;
           j_msg, 0, j_msg_size, reinterpret_cast<jbyte const*>(n_msg.data())); \
         if (env->ExceptionCheck()) { return ret_val; }                         \
         jint e_row         = static_cast<jint>(e.get_row_number());            \
-        jobject cuda_error = env->NewObject(ex_class, ctor_id, j_msg, e_row);  \
+        jboolean const is_disagreement =                                      \
+          static_cast<jboolean>(e.is_time_parser_policy_disagreement());       \
+        jobject cuda_error =                                                  \
+          env->NewObject(ex_class, ctor_id, j_msg, e_row, is_disagreement);    \
         if (cuda_error != NULL) { env->Throw((jthrowable)cuda_error); }        \
       }                                                                        \
     }                                                                          \
@@ -392,7 +395,12 @@ JNIEXPORT jlong JNICALL Java_com_nvidia_spark_rapids_jni_CastStrings_parseDateSt
 }
 
 JNIEXPORT jlong JNICALL Java_com_nvidia_spark_rapids_jni_CastStrings_parseTimestampWithFormat(
-  JNIEnv* env, jclass, jlong input_column, jstring j_format, jint time_parser_policy)
+  JNIEnv* env,
+  jclass,
+  jlong input_column,
+  jstring j_format,
+  jint time_parser_policy,
+  jboolean fail_on_error)
 {
   JNI_NULL_CHECK(env, input_column, "input column is null", 0);
   JNI_NULL_CHECK(env, j_format, "format is null", 0);
@@ -412,7 +420,7 @@ JNIEXPORT jlong JNICALL Java_com_nvidia_spark_rapids_jni_CastStrings_parseTimest
     auto const legacy           = time_parser_policy == TIME_PARSER_POLICY_LEGACY;
     auto const exception_policy = time_parser_policy == TIME_PARSER_POLICY_EXCEPTION;
     return cudf::jni::release_as_jlong(spark_rapids_jni::parse_timestamp_strings_with_format(
-      input_view, format, legacy, exception_policy, cudf::get_default_stream()));
+      input_view, format, legacy, exception_policy, fail_on_error, cudf::get_default_stream()));
   }
   CATCH_CAST_EXCEPTION(env, 0);
 }
