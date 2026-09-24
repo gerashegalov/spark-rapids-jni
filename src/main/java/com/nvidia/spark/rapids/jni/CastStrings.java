@@ -374,10 +374,12 @@ public class CastStrings {
    * this kernel does not implement text forms. Unsupported letters, including lowercase
    * {@code h} for 12-hour clock, {@code S} for fractional seconds, and timezone pattern
    * letters, are rejected. Space matches exactly one space; quoted literals ({@code 'T'}) are
-   * not supported; use a space instead. Pattern literals must be ASCII. In LEGACY mode, non-year
-   * digit fields accept 1 or 2 digits. Adjacent digit fields reserve the minimum width required
-   * by the fields that follow, matching SimpleDateFormat's packed-field behavior. The trailing
-   * tail accepts EOF or any non-digit.
+   * not supported; use a space instead. Pattern literals must be ASCII. In LEGACY mode, a field
+   * immediately followed by another numeric field uses its pattern width, matching
+   * {@code SimpleDateFormat}'s packed-field behavior; other fields accept one or more digits,
+   * including arbitrary leading zeroes when the numeric value fits in an integer. One- and
+   * two-letter LEGACY year patterns are rejected because their moving 80-year interpretation is
+   * not implemented. The trailing tail accepts EOF or any non-digit.
    * Parsed values are wall-clock UTC; timezone rebasing remains the caller's responsibility.
    *
    * <p>This compatibility overload is retained for existing callers. New callers should use

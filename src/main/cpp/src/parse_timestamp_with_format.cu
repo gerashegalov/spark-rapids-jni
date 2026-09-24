@@ -42,6 +42,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -63,16 +64,20 @@ namespace {
 // rejects on CPU and must not be treated as whitespace here.
 __device__ bool is_whitespace(unsigned char c) { return c == ' ' || c == '\t'; }
 
-// Read between `min_d` and `max_d` digits greedily. Advances pos by the digits read.
+// Read between `min_d` and `max_d` digits greedily. A zero `max_d` means unbounded input width;
+// the accumulated value must still fit in an int. This lets LEGACY consume arbitrarily many
+// leading zeroes without accepting a numeric value that this parser cannot represent.
+// Advances pos by the digits read.
 // Returns false (and the partial pos advance is irrelevant since walk_tokens aborts on failure).
 __device__ bool read_min_max_digits(
   unsigned char const* p, int& pos, int end, int min_d, int max_d, int& v)
 {
   v          = 0;
   int digits = 0;
-  while (pos < end && digits < max_d) {
+  while (pos < end && (max_d == 0 || digits < max_d)) {
     int const c = static_cast<int>(p[pos]) - '0';
     if (c < 0 || c > 9) { break; }
+    if (v > (INT_MAX - c) / 10) { return false; }
     v = v * 10 + c;
     ++digits;
     ++pos;
@@ -132,7 +137,7 @@ struct parsed_dt {
 // internally model a pattern as a sequence of printer-parser steps: each step consumes a
 // well-defined chunk of the input and either succeeds or fails the row.
 enum tok_kind : uint8_t {
-  TOK_DIGITS,           // a = field, b = min_digits, c = max_digits
+  TOK_DIGITS,           // a = field, b = min_digits, c = max_digits (0 means unbounded)
   TOK_LITERAL,          // a = literal char
   TOK_SKIP_HT_WS,       // skip [ \t]* (legacy whitespace fold)
   TOK_TRAIL_EOF,        // pos must equal end
@@ -160,9 +165,13 @@ struct format_token {
 // Width policy:
 //   - CORRECTED uses exact width, including packed runs.
 //   - LEGACY mirrors SimpleDateFormat's `obeyCount` rule: a field uses its pattern width when the
-//     next field is another numeric field with no delimiter. Otherwise it parses 1-9 digits.
+//     next field is another numeric field with no delimiter. Otherwise it parses one or more
+//     digits, permitting leading zeroes as long as the resulting value fits in an int.
 //     Thus `MMyyyy` reads `12024` as month 12/year 24, while `yyyyMMdd` reads `2024101` as
 //     year 2024/month 10/day 1.
+//   - LEGACY rejects one- and two-letter year patterns. SimpleDateFormat interprets an exactly
+//     two-digit input through a moving 80-year window, which this deterministic kernel does not
+//     implement. The cudf-spark compatibility allowlists use four-letter years.
 //   - CORRECTED `yyyy/MM/dd` keeps the existing cudf-spark compatibility contract and accepts
 //     1-2 digit month/day fields. This intentionally DEVIATES from Spark CPU, whose STRICT
 //     DateTimeFormatter rejects single-digit fields ("2024/5/6" is null on CPU); the GPU
@@ -213,13 +222,16 @@ std::vector<format_token> compile_format(std::string const& fmt,
         throw std::invalid_argument(std::string("non-year pattern letter run must be length 2: ") +
                                     c);
       }
-      uint8_t const run                = static_cast<uint8_t>(j - i);
+      uint8_t const run = static_cast<uint8_t>(j - i);
+      if (legacy && c == 'y' && run <= 2) {
+        throw std::invalid_argument("LEGACY one- and two-letter year patterns are not supported");
+      }
       bool const abuts_next_field      = j < n && std::isalpha(static_cast<unsigned char>(fmt[j]));
       bool const legacy_variable_width = legacy && !abuts_next_field;
       bool const corrected_variable_width = corrected_variable_width_slash_date && c != 'y';
       bool const variable_width           = legacy_variable_width || corrected_variable_width;
       uint8_t const min_d                 = variable_width ? 1 : run;
-      uint8_t const max_d                 = legacy_variable_width ? 9 : run;
+      uint8_t const max_d                 = legacy_variable_width ? 0 : run;
       // Skip [ \t] before each field, except inside a packed run where whitespace cannot
       // separate adjacent fields.
       bool const abuts_prev_field = (i > 0 && std::isalpha(static_cast<unsigned char>(fmt[i - 1])));

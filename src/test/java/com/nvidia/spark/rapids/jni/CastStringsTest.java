@@ -1722,7 +1722,8 @@ public class CastStringsTest {
   @Test
   void parseTimestampWithFormat_legacyPackedVariableWidth() {
     assertParsedTimestamp(
-        new String[]{"12024", "1224", "124", "012024", "1200024", "1212345", "12024x"},
+        new String[]{"12024", "1224", "124", "012024", "1200024", "1212345",
+                     "120000012345", "12024x"},
         "MMyyyy", true,
         new Long[]{expectedUs(24, 12, 1, 0, 0, 0),
                     expectedUs(24, 12, 1, 0, 0, 0),
@@ -1730,15 +1731,33 @@ public class CastStringsTest {
                     expectedUs(2024, 1, 1, 0, 0, 0),
                     expectedUs(24, 12, 1, 0, 0, 0),
                     expectedUs(12345, 12, 1, 0, 0, 0),
+                    expectedUs(12345, 12, 1, 0, 0, 0),
                     expectedUs(24, 12, 1, 0, 0, 0)});
   }
 
   @Test
   void parseTimestampWithFormat_legacyDelimitedFieldsAreVariableWidth() {
     assertParsedTimestamp(
-        new String[]{"24-1-1", "20245-005-0001"},
+        new String[]{"24-1-1", "0024-1-1", "20245-005-0001", "0000012345-1-1"},
         "yyyy-MM-dd", true,
-        new Long[]{expectedUs(24, 1, 1, 0, 0, 0), expectedUs(20245, 5, 1, 0, 0, 0)});
+        new Long[]{expectedUs(24, 1, 1, 0, 0, 0),
+                    expectedUs(24, 1, 1, 0, 0, 0),
+                    expectedUs(20245, 5, 1, 0, 0, 0),
+                    expectedUs(12345, 1, 1, 0, 0, 0)});
+  }
+
+  @Test
+  void parseTimestampWithFormat_legacyRejectsTwoDigitYearPatterns() {
+    try (ColumnVector in = ColumnVector.fromStrings("24")) {
+      for (String format : new String[]{"y", "yy"}) {
+        Assertions.assertThrows(CudfException.class,
+            () -> CastStrings.parseTimestampWithFormat(
+                in, format, CastStrings.TIME_PARSER_POLICY_LEGACY));
+        Assertions.assertThrows(CudfException.class,
+            () -> CastStrings.parseTimestampWithFormat(
+                in, format, CastStrings.TIME_PARSER_POLICY_EXCEPTION));
+      }
+    }
   }
 
   @Test
