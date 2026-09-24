@@ -66,17 +66,11 @@ __device__ bool is_whitespace(unsigned char c) { return c == ' ' || c == '\t'; }
 // Read between `min_d` and `max_d` digits greedily. Advances pos by the digits read.
 // Returns false (and the partial pos advance is irrelevant since walk_tokens aborts on failure).
 __device__ bool read_min_max_digits(
-  unsigned char const* p, int& pos, int end, int min_d, int max_d, int reserve_d, int& v)
+  unsigned char const* p, int& pos, int end, int min_d, int max_d, int& v)
 {
-  v             = 0;
-  int digits    = 0;
-  int digit_end = pos;
-  while (digit_end < end && p[digit_end] >= '0' && p[digit_end] <= '9') {
-    ++digit_end;
-  }
-  int const available_end = reserve_d == 0 ? end : digit_end - reserve_d;
-  int const parse_end     = available_end > pos ? available_end : pos;
-  while (pos < parse_end && digits < max_d) {
+  v          = 0;
+  int digits = 0;
+  while (pos < end && digits < max_d) {
     int const c = static_cast<int>(p[pos]) - '0';
     if (c < 0 || c > 9) { break; }
     v = v * 10 + c;
@@ -153,7 +147,6 @@ struct format_token {
   uint8_t a;
   uint8_t b;
   uint8_t c;
-  uint8_t d;  // digits reserved for later fields in the same packed group
 };
 
 // ---- Host-side: compile a Spark-style pattern string to a token stream. -------------------------
@@ -166,9 +159,10 @@ struct format_token {
 // A letter run must have length 2 for non-year fields; year is whatever its run length says.
 // Width policy:
 //   - CORRECTED uses exact width, including packed runs.
-//   - LEGACY uses variable width for non-year fields. In packed runs, each field reserves the
-//     minimum width required by the remaining fields so inputs such as `12024` with `MMyyyy`
-//     are split the same way as SimpleDateFormat instead of being rejected as too short.
+//   - LEGACY mirrors SimpleDateFormat's `obeyCount` rule: a field uses its pattern width when the
+//     next field is another numeric field with no delimiter. Otherwise it parses 1-9 digits.
+//     Thus `MMyyyy` reads `12024` as month 12/year 24, while `yyyyMMdd` reads `2024101` as
+//     year 2024/month 10/day 1.
 //   - CORRECTED `yyyy/MM/dd` keeps the existing cudf-spark compatibility contract and accepts
 //     1-2 digit month/day fields. This intentionally DEVIATES from Spark CPU, whose STRICT
 //     DateTimeFormatter rejects single-digit fields ("2024/5/6" is null on CPU); the GPU
@@ -209,8 +203,6 @@ std::vector<format_token> compile_format(std::string const& fmt,
       while (j < n && fmt[j] == c) {
         ++j;
       }
-      bool const packed = (i > 0 && std::isalpha(static_cast<unsigned char>(fmt[i - 1]))) ||
-                          (j < n && std::isalpha(static_cast<unsigned char>(fmt[j])));
       if (j - i > 9) {
         throw std::invalid_argument(std::string("pattern letter run too long: ") + c);
       }
@@ -221,28 +213,18 @@ std::vector<format_token> compile_format(std::string const& fmt,
         throw std::invalid_argument(std::string("non-year pattern letter run must be length 2: ") +
                                     c);
       }
-      uint8_t const run         = static_cast<uint8_t>(j - i);
-      bool const variable_width = (legacy && c != 'y') || corrected_variable_width_slash_date;
-      uint8_t const min_d       = (c == 'y') ? run : (variable_width ? 1 : run);
-      uint8_t const max_d       = run;
-      uint8_t reserve_d         = 0;
-      if (legacy && packed) {
-        for (size_t k = j; k < n && std::isalpha(static_cast<unsigned char>(fmt[k]));) {
-          char const next = fmt[k];
-          size_t next_end = k;
-          while (next_end < n && fmt[next_end] == next) {
-            ++next_end;
-          }
-          auto const next_run = static_cast<uint8_t>(next_end - k);
-          reserve_d += next == 'y' ? next_run : 1;
-          k = next_end;
-        }
-      }
+      uint8_t const run                = static_cast<uint8_t>(j - i);
+      bool const abuts_next_field      = j < n && std::isalpha(static_cast<unsigned char>(fmt[j]));
+      bool const legacy_variable_width = legacy && !abuts_next_field;
+      bool const corrected_variable_width = corrected_variable_width_slash_date && c != 'y';
+      bool const variable_width           = legacy_variable_width || corrected_variable_width;
+      uint8_t const min_d                 = variable_width ? 1 : run;
+      uint8_t const max_d                 = legacy_variable_width ? 9 : run;
       // Skip [ \t] before each field, except inside a packed run where whitespace cannot
       // separate adjacent fields.
       bool const abuts_prev_field = (i > 0 && std::isalpha(static_cast<unsigned char>(fmt[i - 1])));
-      if (legacy && !abuts_prev_field) { out.push_back({TOK_SKIP_HT_WS, 0, 0, 0, 0}); }
-      out.push_back({TOK_DIGITS, letter_to_field(c), min_d, max_d, reserve_d});
+      if (legacy && !abuts_prev_field) { out.push_back({TOK_SKIP_HT_WS, 0, 0, 0}); }
+      out.push_back({TOK_DIGITS, letter_to_field(c), min_d, max_d});
       saw_digit_field = true;
       i               = j;
     } else {
@@ -251,12 +233,12 @@ std::vector<format_token> compile_format(std::string const& fmt,
       if (static_cast<unsigned char>(c) >= 0x80) {
         throw std::invalid_argument("non-ASCII literal in pattern is not supported");
       }
-      out.push_back({TOK_LITERAL, static_cast<uint8_t>(c), 0, 0, 0});
+      out.push_back({TOK_LITERAL, static_cast<uint8_t>(c), 0, 0});
       ++i;
     }
   }
   if (!saw_digit_field) { throw std::invalid_argument("timestamp format has no datetime fields"); }
-  out.push_back({legacy ? TOK_TRAIL_NON_DIGIT : TOK_TRAIL_EOF, 0, 0, 0, 0});
+  out.push_back({legacy ? TOK_TRAIL_NON_DIGIT : TOK_TRAIL_EOF, 0, 0, 0});
   return out;
 }
 
@@ -288,7 +270,7 @@ __device__ bool walk_tokens(unsigned char const* p,
     switch (t.kind) {
       case TOK_DIGITS: {
         int v = 0;
-        ok    = read_min_max_digits(p, pos, end, t.b, t.c, t.d, v);
+        ok    = read_min_max_digits(p, pos, end, t.b, t.c, v);
         if (ok) { ok = store_field(d, t.a, v); }
         break;
       }

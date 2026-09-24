@@ -1694,11 +1694,16 @@ public class CastStringsTest {
   void parseTimestampWithFormat_legacyPackedAndDateTime() {
     long ts = expectedUs(2024, 12, 31, 23, 59, 58);
 
-    // yyyyMMdd packed: exactly 8 digits, year(4)+month(2)+day(2).
+    // yyyyMMdd packed: year and month obey their pattern widths because another numeric field
+    // follows, while the terminal day is variable-width under SimpleDateFormat.
     assertParsedTimestamp(
-        new String[]{"20240506", "2024050", "202405061", " 20240506 "},
+        new String[]{"20240506", "2024101", "202410001", "2024050", "202411", "20241",
+                     "202405061", " 20240506 "},
         "yyyyMMdd", true,
-        new Long[]{expectedUs(2024, 5, 6, 0, 0, 0), null, null,
+        new Long[]{expectedUs(2024, 5, 6, 0, 0, 0),
+                    expectedUs(2024, 10, 1, 0, 0, 0),
+                    expectedUs(2024, 10, 1, 0, 0, 0),
+                    null, null, null, null,
                     expectedUs(2024, 5, 6, 0, 0, 0)});
 
     // yyyyMMdd HH:mm:ss: 'T' separator rejected (literal space matches only ' ').
@@ -1716,11 +1721,24 @@ public class CastStringsTest {
 
   @Test
   void parseTimestampWithFormat_legacyPackedVariableWidth() {
-    long y2024_01_01 = expectedUs(2024, 1, 1, 0, 0, 0);
     assertParsedTimestamp(
-        new String[]{"12024", "012024", "12024x"},
+        new String[]{"12024", "1224", "124", "012024", "1200024", "1212345", "12024x"},
         "MMyyyy", true,
-        new Long[]{y2024_01_01, y2024_01_01, y2024_01_01});
+        new Long[]{expectedUs(24, 12, 1, 0, 0, 0),
+                    expectedUs(24, 12, 1, 0, 0, 0),
+                    expectedUs(4, 12, 1, 0, 0, 0),
+                    expectedUs(2024, 1, 1, 0, 0, 0),
+                    expectedUs(24, 12, 1, 0, 0, 0),
+                    expectedUs(12345, 12, 1, 0, 0, 0),
+                    expectedUs(24, 12, 1, 0, 0, 0)});
+  }
+
+  @Test
+  void parseTimestampWithFormat_legacyDelimitedFieldsAreVariableWidth() {
+    assertParsedTimestamp(
+        new String[]{"24-1-1", "20245-005-0001"},
+        "yyyy-MM-dd", true,
+        new Long[]{expectedUs(24, 1, 1, 0, 0, 0), expectedUs(20245, 5, 1, 0, 0, 0)});
   }
 
   @Test
@@ -1883,9 +1901,14 @@ public class CastStringsTest {
         {"yyyy-MM-dd", " 2024-05-06 "},
         {"yyyy-MM-dd", "2024- 05- 06"},
         {"yyyy-MM-dd HH:mm:ss", "1999-12-31  11:59:59"},
+        {"yyyy-MM-dd", "24-1-1"},
         {"yyyy/MM/dd", "2024/5/6"},
         {"yyyyMMdd", "2024101"},
-        {"MMyyyy", "12024"}
+        {"yyyyMMdd", "202410001"},
+        {"MMyyyy", "12024"},
+        {"MMyyyy", "1224"},
+        {"MMyyyy", "124"},
+        {"MMyyyy", "1212345"}
     };
     for (String[] testCase : cases) {
       CastException error = assertExceptionPolicyDisagreement(testCase[1], testCase[0]);
