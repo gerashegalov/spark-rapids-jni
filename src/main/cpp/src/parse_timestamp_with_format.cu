@@ -220,8 +220,10 @@ std::vector<format_token> compile_format(std::string const& fmt,
       uint8_t const min_d                 = variable_width ? 1 : run;
       uint8_t const max_d                 = legacy_variable_width ? 0 : run;
       if (legacy) {
-        out.push_back({TOK_LEGACY_DIGITS, letter_to_field(c),
-                       static_cast<uint8_t>(abuts_next_field ? run : 0), 0});
+        out.push_back({TOK_LEGACY_DIGITS,
+                       letter_to_field(c),
+                       static_cast<uint8_t>(abuts_next_field ? run : 0),
+                       0});
       } else {
         out.push_back({TOK_DIGITS, letter_to_field(c), min_d, max_d});
       }
