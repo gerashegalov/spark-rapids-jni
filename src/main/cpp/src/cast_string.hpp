@@ -237,16 +237,19 @@ std::unique_ptr<cudf::column> parse_strings_to_date(
  * name) are rejected because this kernel does not implement text forms. A space in the
  * pattern matches exactly one ' ' in the input; 'T' is rejected as the date/time separator
  * under both policies (unlike the format-less cast). Quoted literals (`'T'`) are not
- * supported. Pattern literals must be ASCII. In LEGACY
- * mode, non-year digit fields are 1 or 2 digits. Adjacent fields reserve the minimum width
- * required by the fields that follow. Parsed values are wall-clock UTC; timezone
+ * supported. Pattern literals must be ASCII. In LEGACY mode, space and tab are skipped before
+ * every numeric field. A field followed by another numeric field uses a raw input window of its
+ * pattern width, including skipped whitespace; terminal and delimited fields accept variable
+ * width digits. LEGACY and EXCEPTION reject `y` and `yy` patterns because their moving 80-year
+ * window is unsupported. Parsed values are wall-clock UTC; timezone
  * rebasing remains the caller's responsibility — in LEGACY mode the trailing non-digit rule
  * silently accepts (and discards) any non-digit suffix including 'Z', so callers must not
  * infer a UTC offset from a trailing 'Z'.
  *
  * @throws spark_rapids_jni::cast_error If CORRECTED rejects a row that LEGACY accepts while
- *                                       exception policy is enabled.
- * @throws std::invalid_argument If legacy and exception policies are both enabled.
+ *                                       exception policy is enabled, or any non-null row fails
+ *                                       when fail_on_error is enabled.
+ * @throws std::invalid_argument If both policies are enabled or the pattern is unsupported.
  *
  * @param input The input string column.
  * @param format Spark format pattern (e.g. `"yyyy-MM-dd HH:mm:ss"`).

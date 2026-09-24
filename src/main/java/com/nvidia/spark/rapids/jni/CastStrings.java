@@ -375,9 +375,9 @@ public class CastStrings {
    * {@code h} for 12-hour clock, {@code S} for fractional seconds, and timezone pattern
    * letters, are rejected. Space matches exactly one space; quoted literals ({@code 'T'}) are
    * not supported; use a space instead. Pattern literals must be ASCII. In LEGACY mode, a field
-   * immediately followed by another numeric field uses its pattern width, matching
-   * {@code SimpleDateFormat}'s packed-field behavior; other fields accept one or more digits,
-   * including arbitrary leading zeroes when the numeric value fits in an integer. One- and
+   * immediately followed by another numeric field uses a raw input window of its pattern width,
+   * including any skipped space or tab. Other fields skip space or tab and accept one or more
+   * digits, including arbitrary leading zeroes when the numeric value fits in an integer. One- and
    * two-letter LEGACY year patterns are rejected because their moving 80-year interpretation is
    * not implemented. The trailing tail accepts EOF or any non-digit.
    * Parsed values are wall-clock UTC; timezone rebasing remains the caller's responsibility.

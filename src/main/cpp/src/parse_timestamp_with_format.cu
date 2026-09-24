@@ -59,10 +59,8 @@ namespace {
 
 // ---- Low-level string-parsing primitives. ------------------------------------------------------
 
-// LEGACY parses via java.text.SimpleDateFormat, which skips only ' ' and '\t' before fields — it
-// does not trimAll. So the outer trim must match: a leading control byte like '\r'/'\f'/'\v'
-// rejects on CPU and must not be treated as whitespace here.
-__device__ bool is_whitespace(unsigned char c) { return c == ' ' || c == '\t'; }
+// LEGACY SimpleDateFormat skips only ' ' and '\t' before each numeric field. For a packed field,
+// skipped characters still count against that field's pattern width.
 
 // Read between `min_d` and `max_d` digits greedily. A zero `max_d` means unbounded input width;
 // the accumulated value must still fit in an int. This lets LEGACY consume arbitrarily many
@@ -110,17 +108,6 @@ __device__ bool has_leading_newline(unsigned char const* p, int end)
   return probe < end && p[probe] == '\n';
 }
 
-// In-place trim: advance pos past leading whitespace, pull end back past trailing.
-__device__ void trim(unsigned char const* p, int& pos, int& end)
-{
-  while (pos < end && is_whitespace(p[pos])) {
-    ++pos;
-  }
-  while (pos < end && is_whitespace(p[end - 1])) {
-    --end;
-  }
-}
-
 // Year/month/day/hour/minute/second; defaults match cuDF strftime missing-field semantics.
 struct parsed_dt {
   int year   = 1970;
@@ -138,8 +125,8 @@ struct parsed_dt {
 // well-defined chunk of the input and either succeeds or fails the row.
 enum tok_kind : uint8_t {
   TOK_DIGITS,           // a = field, b = min_digits, c = max_digits (0 means unbounded)
+  TOK_LEGACY_DIGITS,    // a = field, b = obeyCount width (0 means unbounded)
   TOK_LITERAL,          // a = literal char
-  TOK_SKIP_HT_WS,       // skip [ \t]* (legacy whitespace fold)
   TOK_TRAIL_EOF,        // pos must equal end
   TOK_TRAIL_NON_DIGIT,  // pos == end OR p[pos] is not a digit (legacy tail rule)
 };
@@ -164,9 +151,10 @@ struct format_token {
 // A letter run must have length 2 for non-year fields; year is whatever its run length says.
 // Width policy:
 //   - CORRECTED uses exact width, including packed runs.
-//   - LEGACY mirrors SimpleDateFormat's `obeyCount` rule: a field uses its pattern width when the
-//     next field is another numeric field with no delimiter. Otherwise it parses one or more
-//     digits, permitting leading zeroes as long as the resulting value fits in an int.
+//   - LEGACY mirrors SimpleDateFormat's `obeyCount` rule: a field uses a raw input window of its
+//     pattern width when the next field is numeric with no delimiter. Skipped space/tab consumes
+//     that window. Otherwise it parses one or more digits after skipping space/tab, permitting
+//     leading zeroes as long as the resulting value fits in an int.
 //     Thus `MMyyyy` reads `12024` as month 12/year 24, while `yyyyMMdd` reads `2024101` as
 //     year 2024/month 10/day 1.
 //   - LEGACY rejects one- and two-letter year patterns. SimpleDateFormat interprets an exactly
@@ -179,8 +167,7 @@ struct format_token {
 // Literal handling:
 //   - A space matches exactly one ' '. Spark rejects 'T' as the separator for a space pattern
 //     under both policies (unlike the format-less cast, which accepts 'T').
-//   - LEGACY: SimpleDateFormat skips [ \t] before every numeric field, so a TOK_SKIP_HT_WS
-//     precedes each non-packed digit field (subsumes the old REMOVE_WHITESPACE_FROM_MONTH_DAY).
+//   - LEGACY: SimpleDateFormat skips [ \t] before every numeric field, including packed fields.
 // The trailing token is TOK_TRAIL_EOF for CORRECTED and TOK_TRAIL_NON_DIGIT for LEGACY.
 
 uint8_t letter_to_field(char c)
@@ -232,11 +219,12 @@ std::vector<format_token> compile_format(std::string const& fmt,
       bool const variable_width           = legacy_variable_width || corrected_variable_width;
       uint8_t const min_d                 = variable_width ? 1 : run;
       uint8_t const max_d                 = legacy_variable_width ? 0 : run;
-      // Skip [ \t] before each field, except inside a packed run where whitespace cannot
-      // separate adjacent fields.
-      bool const abuts_prev_field = (i > 0 && std::isalpha(static_cast<unsigned char>(fmt[i - 1])));
-      if (legacy && !abuts_prev_field) { out.push_back({TOK_SKIP_HT_WS, 0, 0, 0}); }
-      out.push_back({TOK_DIGITS, letter_to_field(c), min_d, max_d});
+      if (legacy) {
+        out.push_back({TOK_LEGACY_DIGITS, letter_to_field(c),
+                       static_cast<uint8_t>(abuts_next_field ? run : 0), 0});
+      } else {
+        out.push_back({TOK_DIGITS, letter_to_field(c), min_d, max_d});
+      }
       saw_digit_field = true;
       i               = j;
     } else {
@@ -286,8 +274,17 @@ __device__ bool walk_tokens(unsigned char const* p,
         if (ok) { ok = store_field(d, t.a, v); }
         break;
       }
+      case TOK_LEGACY_DIGITS: {
+        // SimpleDateFormat captures the packed field's input limit before skipping whitespace.
+        // Thus " 12024" with MMyyyy has only one month digit inside the two-character window.
+        int const field_end = t.b == 0 || end - pos < t.b ? end : pos + t.b;
+        skip_ht_whitespace(p, pos, field_end);
+        int v = 0;
+        ok    = read_min_max_digits(p, pos, field_end, 1, 0, v);
+        if (ok) { ok = store_field(d, t.a, v); }
+        break;
+      }
       case TOK_LITERAL: ok = try_parse_char(p, pos, end, t.a); break;
-      case TOK_SKIP_HT_WS: skip_ht_whitespace(p, pos, end); break;
       case TOK_TRAIL_EOF: ok = (pos == end); break;
       case TOK_TRAIL_NON_DIGIT:
         if (pos < end) {
@@ -327,8 +324,6 @@ struct parse_with_format_fn {
 
     if (parse_legacy) {
       if (has_leading_newline(p, end)) { return false; }
-      trim(p, pos, end);
-      if (pos >= end) { return false; }
     }
 
     parsed_dt d{};
