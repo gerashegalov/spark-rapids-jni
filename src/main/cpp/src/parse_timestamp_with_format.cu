@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026, NVIDIA CORPORATION.
+ * Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,8 +68,8 @@ __device__ bool is_whitespace(unsigned char c) { return c == ' ' || c == '\t'; }
 __device__ bool read_min_max_digits(
   unsigned char const* p, int& pos, int end, int min_d, int max_d, int reserve_d, int& v)
 {
-  v          = 0;
-  int digits = 0;
+  v             = 0;
+  int digits    = 0;
   int digit_end = pos;
   while (digit_end < end && p[digit_end] >= '0' && p[digit_end] <= '9') {
     ++digit_end;
@@ -369,8 +369,8 @@ struct parse_with_format_fn {
     }
 
     set_invalid(idx);
-    bool const parser_disagreement = !legacy_tokens.empty() &&
-                                     parse(p, sv.size_bytes(), legacy_tokens, true, parsed);
+    bool const parser_disagreement =
+      !legacy_tokens.empty() && parse(p, sv.size_bytes(), legacy_tokens, true, parsed);
     if (first_error_row != nullptr) {
       auto first_error_row_ref =
         cuda::atomic_ref<cudf::size_type, cuda::thread_scope_device>{*first_error_row};
@@ -459,16 +459,14 @@ std::unique_ptr<cudf::column> parse_timestamp_strings_with_format(
 
   if (first_error_row || first_disagreement_row) {
     // value(stream) synchronizes the stream before returning the device value to the host.
-    auto const first_invalid =
-      first_error_row ? first_error_row->value(stream) : num_rows;
+    auto const first_invalid = first_error_row ? first_error_row->value(stream) : num_rows;
     auto const first_disagreement =
       first_disagreement_row ? first_disagreement_row->value(stream) : num_rows;
     auto const row = std::min(first_invalid, first_disagreement);
     if (row < num_rows) {
       auto const error         = cudf::get_element(input.parent(), row, stream, temp_mr);
       auto const& string_error = static_cast<cudf::string_scalar const&>(*error);
-      throw cast_error(
-        row, string_error.to_string(stream), row == first_disagreement);
+      throw cast_error(row, string_error.to_string(stream), row == first_disagreement);
     }
   }
 
