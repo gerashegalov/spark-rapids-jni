@@ -345,8 +345,8 @@ JNIEXPORT jlong JNICALL Java_com_nvidia_spark_rapids_jni_CastStrings_hexToBytes(
   JNI_TRY
   {
     cudf::jni::auto_set_device(env);
-    auto const input = cudf::strings_column_view{
-      *std::bit_cast<cudf::column_view const*>(input_column)};
+    auto const input =
+      cudf::strings_column_view{*std::bit_cast<cudf::column_view const*>(input_column)};
     auto result = spark_rapids_jni::hex_to_bytes(input, cudf::get_default_stream());
     return cudf::jni::release_as_jlong(result);
   }

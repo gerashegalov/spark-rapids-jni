@@ -138,7 +138,7 @@ struct write_bytes_fn {
     auto const value  = d_strings.element<cudf::string_view>(idx);
     auto const length = value.size_bytes();
     if (length >= max_serial_length) { return; }
-    auto* out         = output + offsets[idx];
+    auto* out = output + offsets[idx];
     cudf::size_type char_idx{0};
     cudf::size_type byte_idx{0};
     if ((length & 1) != 0) {
@@ -189,7 +189,7 @@ struct short_row_size_fn {
   }
 };
 
-constexpr int decode_block_size = 256;
+constexpr int decode_block_size                       = 256;
 constexpr cudf::size_type max_direct_cooperative_rows = 4096;
 constexpr cudf::size_type max_all_cooperative_rows    = 16384;
 
@@ -197,8 +197,8 @@ CUDF_KERNEL void validate_hex_rows(cudf::column_device_view strings,
                                    cudf::size_type* row_sizes,
                                    cudf::size_type const* selected_rows)
 {
-  auto const row = selected_rows == nullptr ? static_cast<cudf::size_type>(blockIdx.x)
-                                            : selected_rows[blockIdx.x];
+  auto const row =
+    selected_rows == nullptr ? static_cast<cudf::size_type>(blockIdx.x) : selected_rows[blockIdx.x];
   if (row >= strings.size()) { return; }
 
   __shared__ int valid;
@@ -208,8 +208,7 @@ CUDF_KERNEL void validate_hex_rows(cudf::column_device_view strings,
 
   if (input_valid) {
     auto const value = strings.element<cudf::string_view>(row);
-    for (int64_t char_idx = threadIdx.x; char_idx < value.size_bytes();
-         char_idx += blockDim.x) {
+    for (int64_t char_idx = threadIdx.x; char_idx < value.size_bytes(); char_idx += blockDim.x) {
       if (hex_digit(static_cast<unsigned char>(value.data()[char_idx])) < 0) {
         atomicExch(&valid, 0);
         break;
@@ -220,7 +219,7 @@ CUDF_KERNEL void validate_hex_rows(cudf::column_device_view strings,
 
   if (threadIdx.x == 0) {
     auto const length = input_valid ? strings.element<cudf::string_view>(row).size_bytes() : 0;
-    row_sizes[row] = valid != 0 ? length / 2 + (length & 1) : -1;
+    row_sizes[row]    = valid != 0 ? length / 2 + (length & 1) : -1;
   }
 }
 
@@ -246,23 +245,22 @@ CUDF_KERNEL void decode_hex_rows(cudf::column_device_view strings,
                                  uint8_t* output,
                                  cudf::size_type const* selected_rows)
 {
-  auto const row = selected_rows == nullptr ? static_cast<cudf::size_type>(blockIdx.x)
-                                            : selected_rows[blockIdx.x];
+  auto const row =
+    selected_rows == nullptr ? static_cast<cudf::size_type>(blockIdx.x) : selected_rows[blockIdx.x];
   if (row >= strings.size() || row_sizes[row] <= 0) { return; }
 
   auto const value  = strings.element<cudf::string_view>(row);
   auto const length = value.size_bytes();
   auto const odd    = length & 1;
   auto* out         = output + offsets[row];
-  for (cudf::size_type byte_idx = threadIdx.x; byte_idx < row_sizes[row];
-       byte_idx += blockDim.x) {
+  for (cudf::size_type byte_idx = threadIdx.x; byte_idx < row_sizes[row]; byte_idx += blockDim.x) {
     if (odd != 0 && byte_idx == 0) {
       out[byte_idx] = static_cast<uint8_t>(hex_digit(value.data()[0]));
     } else {
       auto const char_idx = byte_idx * 2 - odd;
       auto const high     = hex_digit(value.data()[char_idx]);
       auto const low      = hex_digit(value.data()[char_idx + 1]);
-      out[byte_idx]      = static_cast<uint8_t>((high << 4) | low);
+      out[byte_idx]       = static_cast<uint8_t>((high << 4) | low);
     }
   }
 }
@@ -328,8 +326,7 @@ std::unique_ptr<cudf::column> hex_to_bytes(cudf::strings_column_view const& inpu
       auto [valid_mask, null_count] = cudf::detail::valid_if(
         indices, indices + input.size(), valid_hex_fn{*d_column}, stream, mr);
       auto const* mask_ptr = reinterpret_cast<cudf::bitmask_type const*>(valid_mask.data());
-      auto sizes =
-        thrust::make_transform_iterator(indices, decoded_size_fn{*d_column, mask_ptr});
+      auto sizes = thrust::make_transform_iterator(indices, decoded_size_fn{*d_column, mask_ptr});
       auto [offsets, total_bytes] =
         cudf::detail::make_offsets_child_column(sizes, sizes + input.size(), stream, mr);
 
@@ -347,23 +344,20 @@ std::unique_ptr<cudf::column> hex_to_bytes(cudf::strings_column_view const& inpu
 
       auto child = std::make_unique<cudf::column>(
         std::move(bytes), cudf::create_null_mask(0, cudf::mask_state::UNALLOCATED), 0);
-      return cudf::make_lists_column(input.size(),
-                                     std::move(offsets),
-                                     std::move(child),
-                                     null_count,
-                                     std::move(valid_mask));
+      return cudf::make_lists_column(
+        input.size(), std::move(offsets), std::move(child), null_count, std::move(valid_mask));
     }
 
     if (input.size() > max_all_cooperative_rows) {
       auto long_rows = rmm::device_uvector<cudf::size_type>(input.size(), stream, mr);
-      auto const long_rows_end = thrust::copy_if(
-        rmm::exec_policy_nosync(stream, cudf::get_current_device_resource_ref()),
-        indices,
-        indices + input.size(),
-        long_rows.begin(),
-        long_row_fn{*d_column, cooperative_threshold});
+      auto const long_rows_end =
+        thrust::copy_if(rmm::exec_policy_nosync(stream, cudf::get_current_device_resource_ref()),
+                        indices,
+                        indices + input.size(),
+                        long_rows.begin(),
+                        long_row_fn{*d_column, cooperative_threshold});
       auto const long_row_count = static_cast<cudf::size_type>(long_rows_end - long_rows.begin());
-      auto row_sizes = rmm::device_uvector<cudf::size_type>(input.size(), stream, mr);
+      auto row_sizes            = rmm::device_uvector<cudf::size_type>(input.size(), stream, mr);
       thrust::transform(rmm::exec_policy_nosync(stream, cudf::get_current_device_resource_ref()),
                         indices,
                         indices + input.size(),
@@ -374,8 +368,8 @@ std::unique_ptr<cudf::column> hex_to_bytes(cudf::strings_column_view const& inpu
 
       auto [valid_mask, null_count] = cudf::detail::valid_if(
         indices, indices + input.size(), valid_decoded_size_fn{row_sizes.data()}, stream, mr);
-      auto sizes = thrust::make_transform_iterator(
-        indices, decoded_size_from_rows_fn{row_sizes.data()});
+      auto sizes =
+        thrust::make_transform_iterator(indices, decoded_size_from_rows_fn{row_sizes.data()});
       auto [offsets, total_bytes] =
         cudf::detail::make_offsets_child_column(sizes, sizes + input.size(), stream, mr);
 
@@ -400,11 +394,8 @@ std::unique_ptr<cudf::column> hex_to_bytes(cudf::strings_column_view const& inpu
 
       auto child = std::make_unique<cudf::column>(
         std::move(bytes), cudf::create_null_mask(0, cudf::mask_state::UNALLOCATED), 0);
-      return cudf::make_lists_column(input.size(),
-                                     std::move(offsets),
-                                     std::move(child),
-                                     null_count,
-                                     std::move(valid_mask));
+      return cudf::make_lists_column(
+        input.size(), std::move(offsets), std::move(child), null_count, std::move(valid_mask));
     }
   }
 
@@ -412,13 +403,10 @@ std::unique_ptr<cudf::column> hex_to_bytes(cudf::strings_column_view const& inpu
   validate_hex_rows<<<input.size(), decode_block_size, 0, stream.get()>>>(
     *d_column, row_sizes.data(), nullptr);
 
-  auto [valid_mask, null_count] = cudf::detail::valid_if(indices,
-                                                        indices + input.size(),
-                                                        valid_decoded_size_fn{row_sizes.data()},
-                                                        stream,
-                                                        mr);
-  auto sizes = thrust::make_transform_iterator(indices,
-                                               decoded_size_from_rows_fn{row_sizes.data()});
+  auto [valid_mask, null_count] = cudf::detail::valid_if(
+    indices, indices + input.size(), valid_decoded_size_fn{row_sizes.data()}, stream, mr);
+  auto sizes =
+    thrust::make_transform_iterator(indices, decoded_size_from_rows_fn{row_sizes.data()});
   auto [offsets, total_bytes] =
     cudf::detail::make_offsets_child_column(sizes, sizes + input.size(), stream, mr);
 
@@ -430,11 +418,8 @@ std::unique_ptr<cudf::column> hex_to_bytes(cudf::strings_column_view const& inpu
 
   auto child = std::make_unique<cudf::column>(
     std::move(bytes), cudf::create_null_mask(0, cudf::mask_state::UNALLOCATED), 0);
-  return cudf::make_lists_column(input.size(),
-                                 std::move(offsets),
-                                 std::move(child),
-                                 null_count,
-                                 std::move(valid_mask));
+  return cudf::make_lists_column(
+    input.size(), std::move(offsets), std::move(child), null_count, std::move(valid_mask));
 }
 
 }  // namespace detail
