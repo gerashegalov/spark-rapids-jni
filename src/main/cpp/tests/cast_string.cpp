@@ -20,6 +20,7 @@
 #include <cudf_test/table_utilities.hpp>
 #include <cudf_test/type_lists.hpp>
 
+#include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/strings/convert/convert_floats.hpp>
 
@@ -184,16 +185,22 @@ TEST_F(HexToBytesTests, ManyRowsWithLongValues)
   for (std::size_t row = 0; row < values.size(); ++row) {
     expected_offsets[row + 1] = expected_offsets[row] + (row == 0 ? 65'537 : row < 3 ? 0 : 1);
   }
-  auto const expected = test::fixed_width_column_wrapper<cudf::size_type>(expected_offsets.begin(),
-                                                                          expected_offsets.end());
-  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view().child(0), expected);
+  auto expected_offsets_column = test::fixed_width_column_wrapper<cudf::size_type>(
+    expected_offsets.begin(), expected_offsets.end());
   std::vector<uint8_t> expected_bytes(expected_offsets.back(), 0xAF);
   std::fill_n(expected_bytes.begin(), 65'537, 0xAA);
   expected_bytes.front() = 0x0A;
-  auto const expected_child =
+  auto expected_child =
     test::fixed_width_column_wrapper<uint8_t>(expected_bytes.begin(), expected_bytes.end());
-  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view().child(1), expected_child);
-  EXPECT_EQ(actual->view().null_count(), 2);
+  auto const valid_iter = test::iterators::nulls_at({1, 2});
+  auto [null_mask, null_count] =
+    cudf::test::detail::make_null_mask(valid_iter, valid_iter + values.size());
+  auto const expected = cudf::make_lists_column(values.size(),
+                                                expected_offsets_column.release(),
+                                                expected_child.release(),
+                                                null_count,
+                                                std::move(null_mask));
+  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view(), expected->view());
 }
 
 TEST_F(HexToBytesTests, ManyRowsWithSparseLongValues)
@@ -212,16 +219,22 @@ TEST_F(HexToBytesTests, ManyRowsWithSparseLongValues)
   for (std::size_t row = 0; row < values.size(); ++row) {
     expected_offsets[row + 1] = expected_offsets[row] + (row == 0 ? 65'537 : row < 3 ? 0 : 1);
   }
-  auto const expected = test::fixed_width_column_wrapper<cudf::size_type>(expected_offsets.begin(),
-                                                                          expected_offsets.end());
-  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view().child(0), expected);
+  auto expected_offsets_column = test::fixed_width_column_wrapper<cudf::size_type>(
+    expected_offsets.begin(), expected_offsets.end());
   std::vector<uint8_t> expected_bytes(expected_offsets.back(), 0xAF);
   std::fill_n(expected_bytes.begin(), 65'537, 0xAA);
   expected_bytes.front() = 0x0A;
-  auto const expected_child =
+  auto expected_child =
     test::fixed_width_column_wrapper<uint8_t>(expected_bytes.begin(), expected_bytes.end());
-  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view().child(1), expected_child);
-  EXPECT_EQ(actual->view().null_count(), 2);
+  auto const valid_iter = test::iterators::nulls_at({1, 2});
+  auto [null_mask, null_count] =
+    cudf::test::detail::make_null_mask(valid_iter, valid_iter + values.size());
+  auto const expected = cudf::make_lists_column(values.size(),
+                                                expected_offsets_column.release(),
+                                                expected_child.release(),
+                                                null_count,
+                                                std::move(null_mask));
+  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view(), expected->view());
 }
 
 TEST_F(HexToBytesTests, SlicedSparseLongRowsAtThreshold)
@@ -242,16 +255,22 @@ TEST_F(HexToBytesTests, SlicedSparseLongRowsAtThreshold)
     auto const row_size       = row == 10'001 ? 156 : row == 10'002 || row == 20'000 ? 0 : 1;
     expected_offsets[row + 1] = expected_offsets[row] + row_size;
   }
-  auto const expected_offsets_column = test::fixed_width_column_wrapper<cudf::size_type>(
+  auto expected_offsets_column = test::fixed_width_column_wrapper<cudf::size_type>(
     expected_offsets.begin(), expected_offsets.end());
-  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view().child(0), expected_offsets_column);
 
   std::vector<uint8_t> expected_bytes(expected_offsets.back(), 0xAF);
   std::fill_n(expected_bytes.begin() + expected_offsets[10'001], 156, 0xAA);
-  auto const expected_child =
+  auto expected_child =
     test::fixed_width_column_wrapper<uint8_t>(expected_bytes.begin(), expected_bytes.end());
-  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view().child(1), expected_child);
-  EXPECT_EQ(actual->view().null_count(), 2);
+  auto const valid_iter = test::iterators::nulls_at({10'002, 20'000});
+  auto [null_mask, null_count] =
+    cudf::test::detail::make_null_mask(valid_iter, valid_iter + 20'001);
+  auto const expected = cudf::make_lists_column(20'001,
+                                                expected_offsets_column.release(),
+                                                expected_child.release(),
+                                                null_count,
+                                                std::move(null_mask));
+  CUDF_TEST_EXPECT_COLUMNS_EQUAL(actual->view(), expected->view());
 }
 
 TEST_F(ParseTimestampWithFormatTests, RejectsConflictingPolicies)

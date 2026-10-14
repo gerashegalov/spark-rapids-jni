@@ -22,6 +22,7 @@
 #include <cast_string.hpp>
 #include <nvbench/nvbench.cuh>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -219,6 +220,19 @@ void unhex(nvbench::state& state)
       if (row + 1 < num_rows) { values[row + 1].back() = 'G'; }
     }
   }
+  state.add_element_count(num_rows, "Rows");
+  auto const [shortest, longest] =
+    std::minmax_element(values.begin(), values.end(), [](auto const& left, auto const& right) {
+      return left.size() < right.size();
+    });
+  state.add_summary("MinStringLength").set_float64("value", shortest->size());
+  state.add_summary("MaxStringLength").set_float64("value", longest->size());
+  state.add_summary("NullRows")
+    .set_float64("value", std::count(validity.begin(), validity.end(), false));
+  state.add_summary("InvalidRows")
+    .set_float64("value", std::count_if(values.begin(), values.end(), [](auto const& value) {
+                   return value.find('G') != std::string::npos;
+                 }));
   auto const input =
     cudf::test::strings_column_wrapper(values.begin(), values.end(), validity.begin());
   auto const stream = cudf::get_default_stream();
