@@ -160,6 +160,8 @@ struct format_token {
 //   - LEGACY rejects one- and two-letter year patterns. SimpleDateFormat interprets an exactly
 //     two-digit input through a moving 80-year window, which this deterministic kernel does not
 //     implement. The cudf-spark compatibility allowlists use four-letter years.
+//   - LEGACY rejects year 0. Non-lenient SimpleDateFormat parses `y` as year-of-era, whose
+//     GregorianCalendar minimum is 1, so `MMyyyy` input `010` is null rather than 0000-01-01.
 //   - CORRECTED `yyyy/MM/dd` keeps the existing cudf-spark compatibility contract and accepts
 //     1-2 digit month/day fields. This intentionally DEVIATES from Spark CPU, whose STRICT
 //     DateTimeFormatter rejects single-digit fields ("2024/5/6" is null on CPU); the GPU
@@ -330,6 +332,7 @@ struct parse_with_format_fn {
 
     parsed_dt d{};
     if (!walk_tokens(p, pos, end, parse_tokens.data(), static_cast<int>(parse_tokens.size()), d) ||
+        (parse_legacy && d.year < 1) ||
         !date_time_utils::is_valid_date_for_timestamp(d.year, d.month, d.day) ||
         !date_time_utils::is_valid_time(d.hour, d.minute, d.second, /*us*/ 0)) {
       return false;

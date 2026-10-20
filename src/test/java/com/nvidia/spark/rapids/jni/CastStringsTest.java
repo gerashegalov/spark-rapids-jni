@@ -1772,6 +1772,28 @@ public class CastStringsTest {
   }
 
   @Test
+  void parseTimestampWithFormat_legacyRejectsYearZero() {
+    // Non-lenient SimpleDateFormat rejects year-of-era 0 for packed and delimited fields alike.
+    assertParsedTimestamp(
+        new String[]{"010", "01000", "010000", "011"},
+        "MMyyyy", true,
+        new Long[]{null, null, null, expectedUs(1, 1, 1, 0, 0, 0)});
+    assertParsedTimestamp(
+        new String[]{"00000101", "00010101"},
+        "yyyyMMdd", true,
+        new Long[]{null, expectedUs(1, 1, 1, 0, 0, 0)});
+    assertParsedTimestamp(
+        new String[]{"0000-01-01", "0-01-01", "0000000000-1-1"},
+        "yyyy-MM-dd", true,
+        new Long[]{null, null, null});
+    // Neither parser accepts these rows, so EXCEPTION returns null instead of a disagreement.
+    assertParsedTimestamp(
+        new String[]{"010", "01000"},
+        "MMyyyy", CastStrings.TIME_PARSER_POLICY_EXCEPTION,
+        new Long[]{null, null});
+  }
+
+  @Test
   void parseTimestampWithFormat_legacyRejectsTwoDigitYearPatterns() {
     try (ColumnVector in = ColumnVector.fromStrings("24")) {
       for (String format : new String[]{"y", "yy"}) {
