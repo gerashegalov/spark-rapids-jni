@@ -43,6 +43,7 @@
 #include <algorithm>
 #include <cctype>
 #include <climits>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -62,24 +63,27 @@ namespace {
 // LEGACY SimpleDateFormat skips only ' ' and '\t' before each numeric field. For a packed field,
 // skipped characters still count against that field's pattern width.
 
-// Read between `min_d` and `max_d` digits greedily. A zero `max_d` means unbounded input width;
-// the accumulated value must still fit in an int. This lets LEGACY consume arbitrarily many
-// leading zeroes without accepting a numeric value that this parser cannot represent.
+// Read between `min_d` and `max_d` digits greedily. A zero `max_d` means unbounded input width.
+// LEGACY SimpleDateFormat parses such a field as a long and narrows it with Number.intValue(), so
+// the value keeps only its low 32 bits; a value beyond the long range becomes a double whose
+// intValue() saturates to an invalid field value. Thus `4294969320` reads as 2024, while
+// `9223372036854777832` is rejected. Bounded widths are at most 9 digits and never wrap.
 // Advances pos by the digits read.
 // Returns false (and the partial pos advance is irrelevant since walk_tokens aborts on failure).
 __device__ bool read_min_max_digits(
   unsigned char const* p, int& pos, int end, int min_d, int max_d, int& v)
 {
-  v          = 0;
-  int digits = 0;
+  int64_t acc = 0;
+  int digits  = 0;
   while (pos < end && (max_d == 0 || digits < max_d)) {
     int const c = static_cast<int>(p[pos]) - '0';
     if (c < 0 || c > 9) { break; }
-    if (v > (INT_MAX - c) / 10) { return false; }
-    v = v * 10 + c;
+    if (acc > (LLONG_MAX - c) / 10) { return false; }
+    acc = acc * 10 + c;
     ++digits;
     ++pos;
   }
+  v = static_cast<int32_t>(static_cast<uint32_t>(acc));
   return digits >= min_d;
 }
 
@@ -153,8 +157,9 @@ struct format_token {
 //   - CORRECTED uses exact width, including packed runs.
 //   - LEGACY mirrors SimpleDateFormat's `obeyCount` rule: a field uses a raw input window of its
 //     pattern width when the next field is numeric with no delimiter. Skipped space/tab consumes
-//     that window. Otherwise it parses one or more digits after skipping space/tab, permitting
-//     leading zeroes as long as the resulting value fits in an int.
+//     that window, and the field fails when the window extends past the end of the input.
+//     Otherwise it parses one or more digits after skipping space/tab, permitting arbitrary
+//     leading zeroes and narrowing the value like Number.intValue().
 //     Thus `MMyyyy` reads `12024` as month 12/year 24, while `yyyyMMdd` reads `2024101` as
 //     year 2024/month 10/day 1.
 //   - LEGACY rejects one- and two-letter year patterns. SimpleDateFormat interprets an exactly
@@ -279,9 +284,15 @@ __device__ bool walk_tokens(unsigned char const* p,
         break;
       }
       case TOK_LEGACY_DIGITS: {
-        // SimpleDateFormat captures the packed field's input limit before skipping whitespace.
-        // Thus " 12024" with MMyyyy has only one month digit inside the two-character window.
-        int const field_end = t.b == 0 || end - pos < t.b ? end : pos + t.b;
+        // SimpleDateFormat captures the packed field's input limit before skipping whitespace,
+        // and fails the field when that limit is past the end of the input. Thus " 12024" with
+        // MMyyyy has only one month digit inside the two-character window, and "2 1" with yyyyMM
+        // is rejected.
+        if (t.b != 0 && end - pos < t.b) {
+          ok = false;
+          break;
+        }
+        int const field_end = t.b == 0 ? end : pos + t.b;
         skip_ht_whitespace(p, pos, field_end);
         int v = 0;
         ok    = read_min_max_digits(p, pos, field_end, 1, 0, v);

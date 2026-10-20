@@ -239,12 +239,13 @@ std::unique_ptr<cudf::column> parse_strings_to_date(
  * under both policies (unlike the format-less cast). Quoted literals (`'T'`) are not
  * supported. Pattern literals must be ASCII. In LEGACY mode, space and tab are skipped before
  * every numeric field. A field followed by another numeric field uses a raw input window of its
- * pattern width, including skipped whitespace; terminal and delimited fields accept variable
- * width digits. LEGACY and EXCEPTION reject `y` and `yy` patterns because their moving 80-year
- * window is unsupported. Parsed values are wall-clock UTC; timezone
- * rebasing remains the caller's responsibility — in LEGACY mode the trailing non-digit rule
- * silently accepts (and discards) any non-digit suffix including 'Z', so callers must not
- * infer a UTC offset from a trailing 'Z'.
+ * pattern width, including skipped whitespace, and that window must fit within the input;
+ * terminal and delimited fields accept variable width digits narrowed like Java's
+ * `Number.intValue()`. LEGACY and EXCEPTION reject `y` and `yy` patterns because their moving
+ * 80-year window is unsupported. Parsed values are wall-clock UTC; timezone rebasing remains the
+ * caller's responsibility — in LEGACY mode the trailing non-digit rule silently accepts (and
+ * discards) any non-digit suffix including 'Z', so callers must not infer a UTC offset from a
+ * trailing 'Z'.
  *
  * @throws spark_rapids_jni::cast_error If CORRECTED rejects a row that LEGACY accepts while
  *                                       exception policy is enabled, or any non-null row fails

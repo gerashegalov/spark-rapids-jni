@@ -1794,6 +1794,48 @@ public class CastStringsTest {
   }
 
   @Test
+  void parseTimestampWithFormat_legacyPackedWindowMustFitInput() {
+    // SimpleDateFormat rejects a packed field whose raw window extends past the input.
+    long y2 = expectedUs(2, 1, 1, 0, 0, 0);
+    assertParsedTimestamp(
+        new String[]{"2 1", "2 01", "  2 1", "20241"},
+        "yyyyMM", true,
+        new Long[]{null, y2, y2, expectedUs(2024, 1, 1, 0, 0, 0)});
+    assertParsedTimestamp(new String[]{"3 2"}, "yyyydd", true, new Long[]{null});
+    assertParsedTimestamp(new String[]{"8\t2"}, "yyyyHH", true, new Long[]{null});
+    assertParsedTimestamp(
+        new String[]{"2 1"}, "yyyyMM", CastStrings.TIME_PARSER_POLICY_EXCEPTION,
+        new Long[]{null});
+  }
+
+  @Test
+  void parseTimestampWithFormat_legacyNarrowsLongFieldsLikeIntValue() {
+    // SimpleDateFormat parses a variable-width field as a long and keeps its low 32 bits. Values
+    // that wrap negative, or exceed the long range, are rejected.
+    long y2024 = expectedUs(2024, 1, 1, 0, 0, 0);
+    assertParsedTimestamp(
+        new String[]{"4294969320-1-1", "00000000004294969320-1-1", "2024-1-4294967297",
+                     "2147483648-1-1", "9223372036854775807-1-1", "9223372036854777832-1-1",
+                     "99999999999999999999-1-1"},
+        "yyyy-MM-dd", true,
+        new Long[]{y2024, y2024, y2024, null, null, null, null});
+    assertParsedTimestamp(
+        new String[]{"2024054294967297", "014294969320"},
+        "yyyyMMdd", true,
+        new Long[]{expectedUs(2024, 5, 1, 0, 0, 0), null});
+    assertParsedTimestamp(
+        new String[]{"014294969320"},
+        "MMyyyy", true,
+        new Long[]{y2024});
+    assertParsedTimestamp(
+        new String[]{"2024-01-01 4294967306:00:00"},
+        "yyyy-MM-dd HH:mm:ss", true,
+        new Long[]{expectedUs(2024, 1, 1, 10, 0, 0)});
+    CastException error = assertExceptionPolicyDisagreement("4294969320-01-01", "yyyy-MM-dd");
+    Assertions.assertTrue(error.isTimeParserPolicyDisagreement());
+  }
+
+  @Test
   void parseTimestampWithFormat_legacyRejectsTwoDigitYearPatterns() {
     try (ColumnVector in = ColumnVector.fromStrings("24")) {
       for (String format : new String[]{"y", "yy"}) {
@@ -2030,6 +2072,25 @@ public class CastStringsTest {
               in, "yyyy-MM-dd", CastStrings.TIME_PARSER_POLICY_EXCEPTION));
       Assertions.assertEquals(2, error.getRowWithError());
       Assertions.assertEquals("2024-05-06xxx", error.getStringWithError());
+    }
+  }
+
+  @Test
+  void parseTimestampWithFormat_failOnErrorDistinguishesFirstInvalidFromDisagreement() {
+    String[][] cases = {
+        {"2024-05-06", "invalid", "2024-05-06xxx"},
+        {"2024-05-06", "2024-05-06xxx", "invalid"}
+    };
+    boolean[] expectedDisagreement = {false, true};
+    for (int i = 0; i < cases.length; ++i) {
+      try (ColumnVector in = ColumnVector.fromStrings(cases[i])) {
+        CastException error = Assertions.assertThrows(CastException.class,
+            () -> CastStrings.parseTimestampWithFormat(
+                in, "yyyy-MM-dd", CastStrings.TIME_PARSER_POLICY_EXCEPTION, true));
+        Assertions.assertEquals(1, error.getRowWithError());
+        Assertions.assertEquals(cases[i][1], error.getStringWithError());
+        Assertions.assertEquals(expectedDisagreement[i], error.isTimeParserPolicyDisagreement());
+      }
     }
   }
 

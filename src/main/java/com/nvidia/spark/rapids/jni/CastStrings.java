@@ -376,8 +376,9 @@ public class CastStrings {
    * letters, are rejected. Space matches exactly one space; quoted literals ({@code 'T'}) are
    * not supported; use a space instead. Pattern literals must be ASCII. In LEGACY mode, a field
    * immediately followed by another numeric field uses a raw input window of its pattern width,
-   * including any skipped space or tab. Other fields skip space or tab and accept one or more
-   * digits, including arbitrary leading zeroes when the numeric value fits in an integer. One- and
+   * including any skipped space or tab, and the window must fit within the input. Other fields
+   * skip space or tab and accept one or more digits, including arbitrary leading zeroes, keeping
+   * the low 32 bits of the value like {@code SimpleDateFormat}'s {@code Number.intValue()}. One- and
    * two-letter LEGACY year patterns are rejected because their moving 80-year interpretation is
    * not implemented. The trailing tail accepts EOF or any non-digit.
    * Parsed values are wall-clock UTC; timezone rebasing remains the caller's responsibility.
