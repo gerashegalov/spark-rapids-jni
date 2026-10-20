@@ -1916,17 +1916,33 @@ public class CastStringsTest {
   }
 
   @Test
-  void parseTimestampWithFormat_legacyRejectsTwoDigitYearPatterns() {
+  void parseTimestampWithFormat_rejectsTwoDigitYearPatterns() {
     try (ColumnVector in = ColumnVector.fromStrings("24")) {
-      for (String format : new String[]{"y", "yy"}) {
-        Assertions.assertThrows(CudfException.class,
-            () -> CastStrings.parseTimestampWithFormat(
-                in, format, CastStrings.TIME_PARSER_POLICY_LEGACY));
-        Assertions.assertThrows(CudfException.class,
-            () -> CastStrings.parseTimestampWithFormat(
-                in, format, CastStrings.TIME_PARSER_POLICY_EXCEPTION));
+      for (String format : new String[]{"y", "yy", "yy-MM"}) {
+        for (int policy : new int[]{CastStrings.TIME_PARSER_POLICY_CORRECTED,
+                                    CastStrings.TIME_PARSER_POLICY_LEGACY,
+                                    CastStrings.TIME_PARSER_POLICY_EXCEPTION}) {
+          Assertions.assertThrows(CudfException.class,
+              () -> CastStrings.parseTimestampWithFormat(in, format, policy));
+        }
       }
     }
+  }
+
+  @Test
+  void parseTimestampWithFormat_legacyYearsPastTimestampRangeAreNull() {
+    // Known deviation: Spark CPU LEGACY fails these rows with ArithmeticException from
+    // millisToMicros. EXCEPTION matches Spark: neither parser accepts them, so the result is null.
+    assertParsedTimestamp(
+        new String[]{"294247-01-01", "294248-01-01", "300000-01-01", "300001-01-01"},
+        "yyyy-MM-dd", true,
+        new Long[]{expectedUs(294247, 1, 1, 0, 0, 0), null, null, null});
+    assertParsedTimestamp(
+        new String[]{"300000-01-01"},
+        "yyyy-MM-dd", CastStrings.TIME_PARSER_POLICY_EXCEPTION,
+        new Long[]{null});
+    CastException error = assertExceptionPolicyDisagreement("294247-01-01", "yyyy-MM-dd");
+    Assertions.assertTrue(error.isTimeParserPolicyDisagreement());
   }
 
   @Test

@@ -25,18 +25,10 @@ public class CastException extends RuntimeException {
   private final String stringWithError;
   private final boolean timeParserPolicyDisagreement;
 
-  CastException(byte[] utf8StringWithError, int rowWithError) {
-    this(utf8StringWithError, rowWithError, false);
-  }
-
   CastException(byte[] utf8StringWithError, int rowWithError,
       boolean timeParserPolicyDisagreement) {
     this(new String(utf8StringWithError, StandardCharsets.UTF_8), rowWithError,
         timeParserPolicyDisagreement);
-  }
-
-  CastException(String stringWithError, int rowWithError) {
-    this(stringWithError, rowWithError, false);
   }
 
   CastException(String stringWithError, int rowWithError,

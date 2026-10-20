@@ -242,8 +242,9 @@ std::unique_ptr<cudf::column> parse_strings_to_date(
  * every numeric field. A field followed by another numeric field uses a raw input window of its
  * pattern width, including skipped whitespace, and that window must fit within the input;
  * terminal and delimited fields accept variable width digits narrowed like Java's
- * `Number.intValue()`. LEGACY and EXCEPTION reject `y` and `yy` patterns because their moving
- * 80-year window is unsupported. Parsed values are wall-clock UTC; timezone rebasing remains the
+ * `Number.intValue()`. Every policy rejects `y` and `yy` patterns because their two-digit year
+ * interpretation is unsupported. LEGACY returns null for years past the timestamp range, where
+ * Spark CPU fails the query. Parsed values are wall-clock UTC; timezone rebasing remains the
  * caller's responsibility — in LEGACY mode the trailing non-digit rule silently accepts (and
  * discards) any non-digit suffix including 'Z', so callers must not infer a UTC offset from a
  * trailing 'Z'.

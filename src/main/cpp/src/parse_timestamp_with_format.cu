@@ -146,9 +146,13 @@ struct format_token {
 //     leading zeroes and narrowing the value like Number.intValue().
 //     Thus `MMyyyy` reads `12024` as month 12/year 24, while `yyyyMMdd` reads `2024101` as
 //     year 2024/month 10/day 1.
-//   - LEGACY rejects one- and two-letter year patterns. SimpleDateFormat interprets an exactly
-//     two-digit input through a moving 80-year window, which this deterministic kernel does not
-//     implement. The cudf-spark compatibility allowlists use four-letter years.
+//   - Every policy rejects one- and two-letter year patterns. SimpleDateFormat interprets an
+//     exactly two-digit input through a moving 80-year window, and DateTimeFormatter reads `yy`
+//     as a reduced year based at 2000 and `y` as a variable-width year. This kernel implements
+//     neither. The cudf-spark compatibility allowlists use four-letter years.
+//   - LEGACY returns null for years past the timestamp range (after 294247), where Spark CPU
+//     fails the query with an ArithmeticException from millisToMicros. This is a known
+//     deviation; EXCEPTION and CORRECTED match Spark.
 //   - LEGACY rejects year 0. Non-lenient SimpleDateFormat parses `y` as year-of-era, whose
 //     GregorianCalendar minimum is 1, so `MMyyyy` input `010` is null rather than 0000-01-01.
 //   - CORRECTED `yyyy/MM/dd` keeps the existing cudf-spark compatibility contract and accepts
@@ -227,8 +231,8 @@ std::vector<format_token> compile_format(std::string const& fmt, format_dialect 
                                     c);
       }
       uint8_t const run = static_cast<uint8_t>(j - i);
-      if (legacy && c == 'y' && run <= 2) {
-        throw std::invalid_argument("LEGACY one- and two-letter year patterns are not supported");
+      if (!csv_date && c == 'y' && run <= 2) {
+        throw std::invalid_argument("one- and two-letter year patterns are not supported");
       }
       if (legacy) {
         bool const abuts_next_field = j < n && std::isalpha(static_cast<unsigned char>(fmt[j]));

@@ -379,12 +379,13 @@ public class CastStrings {
    * including any skipped space or tab, and the window must fit within the input. Other fields
    * skip space or tab and accept one or more digits, including arbitrary leading zeroes, keeping
    * the low 32 bits of the value like {@code SimpleDateFormat}'s {@code Number.intValue()}. One- and
-   * two-letter LEGACY year patterns are rejected because their moving 80-year interpretation is
-   * not implemented. The trailing tail accepts EOF or any non-digit.
+   * two-letter year patterns are rejected under every policy because their two-digit year
+   * interpretation is not implemented. LEGACY returns null for years past the timestamp range,
+   * where Spark CPU fails the query. The trailing tail accepts EOF or any non-digit.
    * Parsed values are wall-clock UTC; timezone rebasing remains the caller's responsibility.
    *
    * <p>This compatibility overload is retained for existing callers. New callers should use
-   * {@link #parseTimestampWithFormat(ColumnView, String, int)}.
+   * {@link #parseTimestampWithFormat(ColumnView, String, int, boolean)}.
    *
    * @param input the input string column.
    * @param format Spark format pattern (e.g. {@code "yyyy-MM-dd HH:mm:ss"}).
