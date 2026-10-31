@@ -752,7 +752,7 @@
             <configuration>
               <mainClass>org.python.util.jython</mainClass>
               <arguments>
-                <argument>${project.basedir}/build/native_chunks.py</argument>
+                <argument>${cudf.path}/java/buildscripts/native_chunks.py</argument>
                 <argument>produce</argument>
                 <argument>${project.build.outputDirectory}/${os.arch}/${os.name}/libcudf.so</argument>
                 <argument>--require-loader</argument>
@@ -767,7 +767,7 @@
             <configuration>
               <mainClass>org.python.util.jython</mainClass>
               <arguments>
-                <argument>${project.basedir}/build/native_chunks.py</argument>
+                <argument>${cudf.path}/java/buildscripts/native_chunks.py</argument>
                 <argument>store</argument>
                 <argument>${project.build.outputDirectory}</argument>
                 <argument>${project.build.directory}/${project.build.finalName}-${jni.classifier}.jar</argument>
@@ -781,7 +781,7 @@
             <configuration>
               <mainClass>org.python.util.jython</mainClass>
               <arguments>
-                <argument>${project.basedir}/build/native_chunks.py</argument>
+                <argument>${cudf.path}/java/buildscripts/native_chunks.py</argument>
                 <argument>verify</argument>
                 <argument>${project.build.directory}/${project.build.finalName}-${jni.classifier}.jar</argument>
               </arguments>
@@ -808,6 +808,13 @@
         <includes>
           <!-- Include all files -->
           <include>**/*</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>${cudf.path}/java/buildscripts</directory>
+        <targetPath>ai/rapids/cudf/packaging</targetPath>
+        <includes>
+          <include>native_chunks.py</include>
         </includes>
       </resource>
     </resources>
