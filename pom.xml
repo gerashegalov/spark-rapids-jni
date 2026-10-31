@@ -810,13 +810,6 @@
           <include>**/*</include>
         </includes>
       </resource>
-      <resource>
-        <directory>${cudf.path}/java/buildscripts</directory>
-        <targetPath>ai/rapids/cudf/packaging</targetPath>
-        <includes>
-          <include>native_chunks.py</include>
-        </includes>
-      </resource>
     </resources>
   </build>
 </project>
