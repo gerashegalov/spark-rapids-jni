@@ -731,6 +731,7 @@
         <configuration>
           <includePluginDependencies>true</includePluginDependencies>
           <includeProjectDependencies>false</includeProjectDependencies>
+          <mainClass>org.python.util.jython</mainClass>
         </configuration>
         <dependencies>
           <dependency>
@@ -750,7 +751,6 @@
             <phase>process-resources</phase>
             <goals><goal>java</goal></goals>
             <configuration>
-              <mainClass>org.python.util.jython</mainClass>
               <arguments>
                 <argument>${cudf.path}/java/buildscripts/native_chunks.py</argument>
                 <argument>produce</argument>
@@ -765,7 +765,6 @@
             <phase>package</phase>
             <goals><goal>java</goal></goals>
             <configuration>
-              <mainClass>org.python.util.jython</mainClass>
               <arguments>
                 <argument>${cudf.path}/java/buildscripts/native_chunks.py</argument>
                 <argument>store</argument>
@@ -779,7 +778,6 @@
             <phase>verify</phase>
             <goals><goal>java</goal></goals>
             <configuration>
-              <mainClass>org.python.util.jython</mainClass>
               <arguments>
                 <argument>${cudf.path}/java/buildscripts/native_chunks.py</argument>
                 <argument>verify</argument>
